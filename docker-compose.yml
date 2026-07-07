@@ -1,0 +1,150 @@
+version: '3.9'
+
+services:
+
+  # ----------------------------------------------------
+  # API GATEWAY
+  # ----------------------------------------------------
+
+  ms-apigateway:
+    build:
+      context: ./ApiGateway
+      dockerfile: Dockerfile
+    container_name: ms_apigateway
+    ports:
+      - "9000:9000"
+    depends_on:
+      - ms-transporte
+      - ms-solicitudtransporte
+      - ms-logistica
+    restart: on-failure
+    networks:
+      - TP_Back
+
+  # ----------------------------------------------------
+  # 1. SERVICIO TRANSPORTE
+  # ----------------------------------------------------
+
+  ms-transporte:
+    build:
+      context: ./ServicioTransporte
+      dockerfile: Dockerfile
+    container_name: ms_transporte
+    ports:
+      - "8080:8080" # Mapea 8081 del host al puerto 8080 del contenedor
+    depends_on:
+      - db_transporte
+    # Si la app falla, intenta reiniciarla
+    restart: on-failure
+    networks:
+      - TP_Back
+
+  db_transporte:
+    image: postgres:16
+    container_name: db_transporte
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - transporte_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db_transporte
+    networks:
+      - TP_Back
+
+  # ----------------------------------------------------
+  # 2. SERVICIO SOLICITUD
+  # ----------------------------------------------------
+
+  ms-solicitudtransporte:
+    build:
+      context: ./ServicioSolicitudTransporte
+      dockerfile: Dockerfile
+    container_name: ms_solicitudtransporte
+    ports:
+      - "8082:8080" # Mapea 8082 del host al puerto 8080 del contenedor
+    depends_on:
+      - db_solicitud
+    restart: on-failure
+    networks:
+      - TP_Back
+
+  db_solicitud:
+    image: postgres:16
+    container_name: db_solicitud
+    ports:
+      - "5434:5432"
+    volumes:
+      - solicitud_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db_solicitudtransporte
+    networks:
+      - TP_Back
+
+  # ----------------------------------------------------
+  # 3. SERVICIO LOGÍSTICA
+  # ----------------------------------------------------
+
+  ms-logistica:
+    build:
+      context: ./ServicioLogistica
+      dockerfile: Dockerfile
+    container_name: ms_logistica
+    ports:
+      - "8081:8080" # Mapea 8083 del host al puerto 8080 del contenedor
+    depends_on:
+      - db_logistica
+    restart: on-failure
+    networks:
+      - TP_Back
+
+  db_logistica:
+    image: postgres:16
+    container_name: db_logistica
+    ports:
+      - "5435:5432"
+    volumes:
+      - logistica_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db_logistica
+    networks:
+      - TP_Back
+
+  # ----------------------------------------------------
+  # OSRM - ROUTING SERVICE
+  # ----------------------------------------------------
+
+  osrm:
+    image: osrm/osrm-backend
+    container_name: osrm_server
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
+    command: osrm-routed /data/argentina-latest.osrm
+    restart: on-failure
+    networks:
+      - TP_Back
+
+  # ----------------------------------------------------
+  # DEFINICIÓN DE VOLÚMENES PERSISTENTES
+  # ----------------------------------------------------
+volumes:
+  transporte_data:
+  solicitud_data:
+  logistica_data:
+
+  # ----------------------------------------------------
+  # DEFINICIÓN DE REDES
+  # ----------------------------------------------------
+networks:
+  # Red personalizada para comunicación interna de todos los microservicios y DBs
+  TP_Back:
+    driver: bridge
